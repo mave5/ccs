@@ -298,8 +298,8 @@ def vgg_model(params):
 
     model.add(Flatten())
     model.add(Dropout(0.5))
-    #model.add(Dense(100, activation='relu'))
-    #model.add(Dropout(0.1))
+    model.add(Dense(100, activation='relu'))
+    model.add(Dropout(0.1))
 
     #model.add(Dense(nb_output, activation='sigmoid'))
     model.add(Dense(nb_output, activation='softmax'))

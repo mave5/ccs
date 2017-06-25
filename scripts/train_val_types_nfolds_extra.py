@@ -27,9 +27,8 @@ from sklearn.model_selection import StratifiedKFold
 
 # path to data
 path2root='/media/mra/win71/data/misc/kaggle/intel/data/'
-path2trainhdf5='/media/mra/win71/data/misc/kaggle/intel/data/train.hdf5'
-#path2testhdf5='/media/mra/win71/data/misc/kaggle/intel/data/test.hdf5'
-path2testhdf5='/media/mra/win71/data/misc/kaggle/intel/data/test_stg2.hdf5'
+path2trainhdf5='/media/mra/win71/data/misc/kaggle/intel/data/train_extra.hdf5'
+path2testhdf5='/media/mra/win71/data/misc/kaggle/intel/data/test.hdf5'
 
 #%%
 
@@ -58,14 +57,14 @@ pre_train=False
 # random data generator
 datagen = ImageDataGenerator(featurewise_center=False,
         samplewise_center=False,
-        #rescale=1/255.,
+        rescale=1/255.,
         featurewise_std_normalization=False,
         samplewise_std_normalization=False,
         zca_whitening=False,
         rotation_range=45,
         width_shift_range=0.1,
         height_shift_range=0.1,
-        shear_range=0.0,
+        shear_range=0.05,
         zoom_range=0.05,
         channel_shift_range=0.0,
         fill_mode='constant',
@@ -184,19 +183,17 @@ def train_test_model(X_train,y_train,X_test,y_test,foldnm=1):
         print ('epoch: %s,  Current Learning Rate: %.1e' %(epoch,model.optimizer.lr.get_value()))
         #seed = np.random.randint(0, 999999)
     
-        batches=0
-        bs=X_train.shape[0]
-        for X_batch, y_batch in datagen.flow(X_train, y_train, batch_size=bs):
-            X_batch=preprocess_input(X_batch)
-            hist = model.fit(X_batch, y_batch,verbose=0,batch_size=batch_size)
-            batches += 1
-            if batches >= len(X_train) / bs:
-                # we need to break the loop by hand because
-                # the generator loops indefinitely
-                break
+#        batches=0
+#        for X_batch, y_batch in datagen.flow(X_train, y_train, batch_size=batch_size):
+#            hist = model.fit(X_batch, y_batch,verbose=0,batch_size=batch_size)
+#            batches += 1
+#            if batches >= len(X_train) / batch_size:
+#                # we need to break the loop by hand because
+#                # the generator loops indefinitely
+#                break
             
-        #hist=model.fit_generator(datagen.flow(X_train, y_train, batch_size=batch_size),\
-                                 #samples_per_epoch=len(X_train), nb_epoch=1, verbose=0,class_weight=class_weight)
+        hist=model.fit_generator(datagen.flow(X_train, y_train, batch_size=batch_size),\
+                                 samples_per_epoch=len(X_train), nb_epoch=1, verbose=0,class_weight=class_weight)
     
         # evaluate on test and train data
         score_test=model.evaluate(X_test,y_test,verbose=0,batch_size=batch_size)
@@ -260,13 +257,13 @@ def train_test_model(X_train,y_train,X_test,y_test,foldnm=1):
 def gamma_correction(img, correction):
     img = img/255.0
     img = cv2.pow(img, correction)
+# train data ids are loaded to be split into k-fold train-test
+ff_train=h5py.File(path2trainhdf5,'r')
+ids=ff_train.keys()
     return np.uint8(img*255)    
     
 #%%
 
-# train data ids are loaded to be split into k-fold train-test
-ff_train=h5py.File(path2trainhdf5,'r')
-ids=ff_train.keys()
 print 'total train', len(ff_train.keys())
 
 # k-fold cross-validation data split
@@ -276,7 +273,7 @@ n_folds=5
 #% model
 print('-'*30)
 # path to train-test.hdf5, first checking if it exists
-path2traintest=path2root+'traintest'+str(h)+'by'+str(w)+'.hdf5'
+path2traintest=path2root+'traintest_extra'+str(h)+'by'+str(w)+'.hdf5'
 if not os.path.exists(path2traintest):
     X,y,ids_out=load_data(ids)
     ff_traintest=h5py.File(path2traintest,'w')
@@ -355,7 +352,7 @@ for train, test in skf.split(X,y):
 
 
     # exeriment name to record weights and scores
-    netinfo='_VGG_FC'
+    netinfo='_extradata_VGG_FC'
     experiment='fold'+str(foldnm)+netinfo+'_hw_'+str(h)+'by'+str(w)+'nbfilters_'+str(params_train['nb_filters'])
     print ('experiment:', experiment)
 
@@ -403,55 +400,34 @@ for train, test in skf.split(X,y):
 #%%
 
 # test on leaderboard data
-df_solution_stg1 = pd.read_csv('../data/solution_stg1_release.csv')
-df_solution_stg1.head()
+df = pd.read_csv('../data/sample_submission.csv')
+print('Number of training patients: {}'.format(len(df)))
+df.head()
 
-df_stg1 = pd.read_csv('../data/sample_submission.csv')
-df_stg2 = pd.read_csv('../data/sample_submission_stg2.csv')
-print('Number of training patients: {}'.format(len(df_stg1)))
-print('Number of training patients: {}'.format(len(df_stg2)))
-df_stg1.head()
-df_stg2.head()
-
-path2test_leader_stg1=path2root+'test_leader_'+str(h)+'by'+str(w)+'.hdf5'
-path2test_leader_stg2=path2root+'test_leader_stg2_'+str(h)+'by'+str(w)+'.hdf5'
-
+path2test_leader=path2root+'test_leader_'+str(h)+'by'+str(w)+'.hdf5'
 # load data
-if not os.path.exists(path2test_leader_stg1):
-    X_test_leader,_,ids_test_leader=load_data(df_stg1.image_name,'test')
-    ff_test_leader=h5py.File(path2test_leader_stg1,'w')
+if not os.path.exists(path2test_leader):
+    X_test_leader,_,ids_test_leader=load_data(df.image_name,'test')
+    ff_test_leader=h5py.File(path2test_leader,'w')
     ff_test_leader['X']=X_test_leader
     ff_test_leader['ids']=ids_test_leader
     ff_test_leader.close()
 else:
     # load
-    ff_test_leader=h5py.File(path2test_leader_stg1,'r')
+    ff_test_leader=h5py.File(path2test_leader,'r')
     X_test_leader=ff_test_leader['X'].value
     id_test_leader=ff_test_leader['ids']
     print 'test leaderboard loaded!'
 
-# normalize
-X_test_leader_stg1=preprocess_input(X_test_leader)
 
-
-# load data
-if not os.path.exists(path2test_leader_stg2):
-    X_test_leader,_,ids_test_leader=load_data(df_stg2.image_name,'test')
-    ff_test_leader=h5py.File(path2test_leader_stg2,'w')
-    ff_test_leader['X']=X_test_leader
-    ff_test_leader['ids']=ids_test_leader
-    ff_test_leader.close()
-else:
-    # load
-    ff_test_leader=h5py.File(path2test_leader_stg2,'r')
-    X_test_leader=ff_test_leader['X'].value
-    id_test_leader=ff_test_leader['ids']
-    print 'test leaderboard loaded!'
+# histogram equalization
+if hist_eq:
+    for k1 in range(X_test_leader.shape[1]):
+        for k in range(X_test_leader.shape[0]):
+            X_test_leader[k,k1] = clahe.apply(X_test_leader[k,k1])
 
 # normalize
-X_test_leader_stg2=preprocess_input(X_test_leader)
-
-X_test_leader=np.append(X_test_leader_stg1,X_test_leader_stg2,axis=0)
+X_test_leader=preprocess_input(X_test_leader)
 
 #%%
 # prediction for nfolds
@@ -460,7 +436,7 @@ for foldnm in range(1,6):
     
     # load weights
     #netinfo='_simpleVGG'
-    experiment='fold'+str(foldnm)+netinfo+'_hw_'+str(h)+'by'+str(w)+'nbfilters_'+str(params_train['nb_filters'])
+    #experiment='fold'+str(foldnm)+netinfo+'_hw_'+str(h)+'by'+str(w)+'nbfilters_'+str(params_train['nb_filters'])
     print ('experiment:', experiment)
     weightfolder='./output/weights/'+experiment
     # path to weights
@@ -481,17 +457,9 @@ y_pred1=np.array(y_pred)
 y_pred2=np.mean(y_pred1,axis=0)
 
 # combine all predictions
-#df.Type_1[:512]=df_solution_stg1.Type_1
-#df.Type_2[:512]=df_solution_stg1.Type_2
-#df.Type_3[:512]=df_solution_stg1.Type_3
-
-#df.Type_1[512:]=y_pred2[:,0]
-#df.Type_2[512:]=y_pred2[:,1]
-#df.Type_3[512:]=y_pred2[:,2]
-
-df_stg2.Type_1=y_pred2[:,0]
-df_stg2.Type_2=y_pred2[:,1]
-df_stg2.Type_3=y_pred2[:,2]
+df.Type_1=y_pred2[:,0]
+df.Type_2=y_pred2[:,1]
+df.Type_3=y_pred2[:,2]
 
 # make submission
 now = datetime.datetime.now()
@@ -499,8 +467,8 @@ info='nfolds'
 suffix = info + '_' + str(now.strftime("%Y-%m-%d-%H-%M"))
 sub_file = os.path.join('./output/submission', 'submission_' + suffix + '.csv')
 
-df_stg2.to_csv(sub_file, index=False)
-print(df_stg2.head()) 
+df.to_csv(sub_file, index=False)
+print(df.head()) 
 
 
 
